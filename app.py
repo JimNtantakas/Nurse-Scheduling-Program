@@ -8,8 +8,17 @@ st.set_page_config(page_title="Πρόγραμμα Νοσηλευτών", page_ic
 
 st.title("📅 Γεννήτρια Προγράμματος Νοσηλευτών")
 
+# --- GLOBAL DATA ---
+# Βγάζουμε τα ονόματα έξω από τη συνάρτηση για να τα βλέπει και το UI
+nurse_names = [
+    "Νταντάκας", "Παρασκευοπούλου", "Αργυροπούλου", "Μανάβη", 
+    "Λαλέτα", "Τζιόμαλου", "Τουρνάκη", "Τσουγκουτζίδου", 
+    "Πάσχος", "Μηλωσά", "Καμηλάρης", "Βενετοπούλου"
+]
+days_names = ['Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Πέμπτη', 'Παρασκευή', 'Σάββατο', 'Κυριακή']
+shift_names = ['Πρωί', 'Απόγευμα', 'Βράδυ']
+
 # --- JSONBIN PERSISTENCE CONFIG ---
-# These can be configured in Streamlit Secrets on the cloud
 JSONBIN_BIN_ID = st.secrets.get("JSONBIN_BIN_ID", "")
 JSONBIN_API_KEY = st.secrets.get("JSONBIN_API_KEY", "")
 
@@ -54,8 +63,8 @@ def save_data(data):
     st.success("Τα δεδομένα αποθηκεύτηκαν τοπικά.")
 
 # --- SCHEDULER FUNCTION ---
-def generate_fair_schedule():
-    num_nurses = 12
+def generate_fair_schedule(leave_requests):
+    num_nurses = len(nurse_names)
     num_weeks = 1  
     num_days = num_weeks * 7
     num_shifts = 3 
@@ -63,12 +72,6 @@ def generate_fair_schedule():
     all_nurses = range(num_nurses)
     all_days = range(num_days)
     all_shifts = range(num_shifts)
-
-    nurse_names = [
-        "Νταντάκας", "Παρασκευοπούλου", "Αργυροπούλου", "Μανάβη", 
-        "Λαλέτα", "Τζιόμαλου", "Τουρνάκη", "Τσουγκουτζίδου", 
-        "Πάσχος", "Μηλωσά", "Καμηλάρης", "Βενετοπούλου"
-    ]
     
     nurse_dict = {name: i for i, name in enumerate(nurse_names)}
     
@@ -95,7 +98,6 @@ def generate_fair_schedule():
         for n_id, shifts_array in saved_data["last_sunday_shifts"].items():
             last_sunday_shifts[int(n_id)] = shifts_array
 
-    leave_requests = [(6, d) for d in range(5)] + [(7, 2)] + [(1, d) for d in range(2)] + [(10, d) for d in range(2, 5)]
     leave_set = set(leave_requests)
 
     model = cp_model.CpModel()
@@ -158,6 +160,7 @@ def generate_fair_schedule():
         model.Add(sum(shifts[(n, 5, s)] for s in all_shifts) == 0) 
         model.Add(sum(shifts[(n, 6, s)] for s in all_shifts) == 0) 
 
+    # Εφαρμογή δυναμικών αδειών
     for (n, d) in leave_requests:
         for s in all_shifts:
             model.Add(shifts[(n, d, s)] == 0)
@@ -227,10 +230,6 @@ def generate_fair_schedule():
     status = solver.Solve(model)
 
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        days_names = ['Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Πέμπτη', 'Παρασκευή', 'Σάββατο', 'Κυριακή']
-        shift_names = ['Πρωί', 'Απόγευμα', 'Βράδυ']
-
-        # --- STREAMLIT UI DISPLAY ---
         st.subheader("📋 Εβδομαδιαίο Πρόγραμμα")
 
         for d in all_days:
@@ -283,9 +282,36 @@ def generate_fair_schedule():
         save_data(saved_data)
 
     else:
-        st.error("Δεν βρέθηκε εφικτό πρόγραμμα! Ελέγξτε τις άδειες.")
+        st.error("Δεν βρέθηκε εφικτό πρόγραμμα! Δοκιμάστε να μειώσετε τον αριθμό των ταυτόχρονων αδειών, καθώς δεν επαρκεί το προσωπικό για την κάλυψη των βαρδιών.")
 
-# --- UI ACTION BUTTON ---
+
+# --- UI: ΔΙΑΧΕΙΡΙΣΗ ΑΔΕΙΩΝ ---
+st.subheader("🏖️ Διαχείριση Αδειών / Ρεπό")
+st.write("Επιλέξτε ποιες ημέρες της εβδομάδας θα απουσιάζει ο κάθε νοσηλευτής/τρια.")
+
+user_leave_requests = []
+
+with st.expander("📝 Φόρμα Καταχώρησης Αδειών", expanded=False):
+    # Φτιάχνουμε στήλες για πιο όμορφο UI (2 στήλες)
+    col1, col2 = st.columns(2)
+    
+    for i, name in enumerate(nurse_names):
+        # Εναλλαγή μεταξύ αριστερής και δεξιάς στήλης
+        col = col1 if i % 2 == 0 else col2
+        
+        with col:
+            selected_days = st.multiselect(
+                f"{name}", 
+                options=days_names,
+                placeholder="Επιλέξτε ημέρες..."
+            )
+            # Μετατροπή των ονομάτων ημερών σε (nurse_index, day_index) για τον αλγόριθμο
+            for day_name in selected_days:
+                day_index = days_names.index(day_name)
+                user_leave_requests.append((i, day_index))
+
+# --- UI: ACTION BUTTON ---
+st.write("---")
 if st.button("🚀 Δημιουργία Νέου Προγράμματος", type="primary", use_container_width=True):
     with st.spinner("Υπολογισμός προγράμματος..."):
-        generate_fair_schedule()
+        generate_fair_schedule(user_leave_requests)
