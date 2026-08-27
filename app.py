@@ -219,11 +219,39 @@ def generate_fair_schedule(leave_requests):
     model.AddMaxEquality(max_total, total_worked_vars)
     model.AddMinEquality(min_total, total_worked_vars)
 
+    
+    # ΝΕΑ ΛΟΓΙΚΗ: ΕΝΘΑΡΡΥΝΣΗ ΣΥΝΕΧΟΜΕΝΩΝ ΡΕΠΟ (Πέναλτι μεμονωμένων ρεπό)
+    works = {}
+    for n in all_nurses:
+        for d in all_days:
+            works[(n, d)] = model.NewBoolVar(f'works_n{n}_d{d}')
+            sum_shifts = sum(shifts[(n, d, s)] for s in all_shifts)
+            # True αν δουλεύει έστω και μια βάρδια, False αν είναι ρεπό
+            model.Add(sum_shifts >= 1).OnlyEnforceIf(works[(n, d)])
+            model.Add(sum_shifts == 0).OnlyEnforceIf(works[(n, d)].Not())
+
+    isolated_off_vars = []
+    for n in all_nurses:
+        # Έλεγχος για τη Δευτέρα (σε σχέση με την προηγούμενη Κυριακή)
+        worked_last_sun = 1 if sum(last_sunday_shifts[n]) > 0 else 0
+        iso_off_0 = model.NewBoolVar(f'iso_off_n{n}_d0')
+        # Αν δούλεψε Κυριακή, έχει ρεπό Δευτέρα, και δουλεύει Τρίτη -> Πέναλτι
+        model.Add(iso_off_0 >= worked_last_sun - works[(n, 0)] + works[(n, 1)] - 1)
+        isolated_off_vars.append(iso_off_0)
+
+        # Έλεγχος για τις υπόλοιπες ενδιάμεσες ημέρες (Τρίτη έως Σάββατο)
+        for d in range(1, num_days - 1):
+            iso_off = model.NewBoolVar(f'iso_off_n{n}_d{d}')
+            # Ενεργοποιείται αν: Δουλεύει(d-1) ΚΑΙ Ρεπό(d) ΚΑΙ Δουλεύει(d+1)
+            model.Add(iso_off >= works[(n, d-1)] - works[(n, d)] + works[(n, d+1)] - 1)
+            isolated_off_vars.append(iso_off)
+
     model.Minimize(
         (max_total - min_total) + 
         1000 * sum(over_ideal_vars) + 
         1000 * sum(under_ideal_vars) +
-        500 * sum(weekend_penalty_vars) 
+        500 * sum(weekend_penalty_vars) +
+        150 * sum(isolated_off_vars)  # Προσθήκη πέναλτι για τα σπαστά ρεπό
     )
 
     solver = cp_model.CpSolver()
