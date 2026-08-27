@@ -123,6 +123,7 @@ def generate_fair_schedule(leave_requests):
 
         for d in range(num_days - 1):
             model.AddImplication(shifts[(n, d, 2)], shifts[(n, d + 1, 0)].Not())
+            model.AddImplication(shifts[(n, d, 2)], shifts[(n, d + 1, 1)].Not())
             model.AddImplication(shifts[(n, d, 1)], shifts[(n, d + 1, 0)].Not())
 
     for n in all_nurses:
