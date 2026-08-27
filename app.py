@@ -9,12 +9,12 @@ st.set_page_config(page_title="Πρόγραμμα Νοσηλευτών", page_ic
 st.title("📅 Γεννήτρια Προγράμματος Νοσηλευτών")
 
 # --- GLOBAL DATA ---
-# Βγάζουμε τα ονόματα έξω από τη συνάρτηση για να τα βλέπει και το UI
-nurse_names = [
-    "Νταντάκας", "Παρασκευοπούλου", "Αργυροπούλου", "Μανάβη", 
-    "Λαλέτα", "Τζιόμαλου", "Τουρνάκη", "Τσουγκουτζίδου", 
-    "Πάσχος", "Μηλωσά", "Καμηλάρης", "Βενετοπούλου"
-]
+
+DEFAULT_NURSES = [f"Nurse {i+1}" for i in range(12)]
+
+# Fetch from secrets if available, otherwise use defaults
+nurse_names = st.secrets.get("NURSE_NAMES", DEFAULT_NURSES)
+
 days_names = ['Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Πέμπτη', 'Παρασκευή', 'Σάββατο', 'Κυριακή']
 shift_names = ['Πρωί', 'Απόγευμα', 'Βράδυ']
 
